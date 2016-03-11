@@ -15,6 +15,8 @@ BuildRequires:  pkgconfig(dlog)
 %description
 descriptionion: Tizen Buffer manager backend module uses drm shm
 
+%global TZ_SYS_RO_SHARE  %{?TZ_SYS_RO_SHARE:%TZ_SYS_RO_SHARE}%{!?TZ_SYS_RO_SHARE:/usr/share}
+
 %prep
 %setup -q
 
@@ -27,8 +29,8 @@ make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
-mkdir -p %{buildroot}/usr/share/license
-cp -af COPYING %{buildroot}/usr/share/license/%{name}
+mkdir -p %{buildroot}/%{TZ_SYS_RO_SHARE}/license
+cp -af COPYING %{buildroot}/%{TZ_SYS_RO_SHARE}/license/%{name}
 %make_install
 
 
@@ -41,7 +43,8 @@ ln -s libtbm_shm.so %{_libdir}/bufmgr/libtbm_default.so
 %postun -p /sbin/ldconfig
 
 %files
+%defattr(-,root,root,-)
 %manifest libtbm-shm.manifest
+%{TZ_SYS_RO_SHARE}/license/%{name}
 %{_libdir}/bufmgr/libtbm_*.so*
-/usr/share/license/%{name}
 
