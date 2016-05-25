@@ -144,6 +144,9 @@ struct _tbm_bo_shm
     pthread_mutex_t mutex;
     int device;
     int opt;
+
+    unsigned int is_scanout;
+    int fd;
 };
 
 /* tbm bufmgr private for shm */
@@ -232,12 +235,14 @@ tbm_shm_bo_alloc (tbm_bo bo, int size, int flags)
     bufmgr_shm = (tbm_bufmgr_shm)tbm_backend_get_bufmgr_priv(bo);
     SHM_RETURN_VAL_IF_FAIL (bufmgr_shm!=NULL, 0);
 
+#if 0
     if (flags & TBM_BO_SCANOUT)
     {
         TBM_SHM_LOG ("[libtbm-shm:%d] warning %s:%d TBM_BO_SCANOUT ins't supported\n",
                 getpid(), __FUNCTION__, __LINE__);
         return 0;
     }
+#endif
 
     bo_shm = calloc (1, sizeof(struct _tbm_bo_shm));
     if (!bo_shm)
@@ -250,27 +255,52 @@ tbm_shm_bo_alloc (tbm_bo bo, int size, int flags)
     //get next key for a allocated shm segment
     key += 1;
 
-    while ((bo_shm->shmid = shmget(key, size,  IPC_CREAT | IPC_EXCL | 0666)) < 0)
-    {
-        if ( errno != EEXIST)
-        {
-            TBM_SHM_LOG ("[libtbm-shm:%d] error %s:%d Fail to allocate the shared memory segment (%s)\n",
-                    getpid(), __FUNCTION__, __LINE__, strerror(errno));
-            free (bo_shm);
-            return 0;
-        }
+    if (flags & TBM_BO_SCANOUT) {
+	    int fd;
+	    void *map;
 
-        //try to allocate the segment with next key;
-        key += 1;
-    }
+	    fd = open("/dev/fb0", O_RDWR);
+	    if (!fd) {
+		TBM_SHM_LOG ("[libtbm-shm:%d] error %s:%d Fail to open framebuffer\n",
+				getpid(), __FUNCTION__, __LINE__);
+		return 0;
+	    }
 
-    bo_shm->key = key;
+	    map = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+	    if (map == MAP_FAILED) {
+		    close(fd);
+		    TBM_SHM_LOG ("[libtbm-shm:%d] error %s:%d size %d, errno = %d\n",
+				    getpid(), __FUNCTION__, __LINE__, size, errno);
+		    return 0;
+	    }
 
-    if ((bo_shm->pBase = shmat(bo_shm->shmid, NULL, 0)) == (char *) -1) {
-        TBM_SHM_LOG ("[libtbm-shm:%d] error %s:%d Fail to attach the shared memory segment (%s)\n",
-                getpid(), __FUNCTION__, __LINE__,  strerror(errno));
-        free(bo_shm);
-        return 0;
+	    bo_shm->key = key;
+	    bo_shm->is_scanout = 1;
+	    bo_shm->fd = fd;
+	    bo_shm->pBase = map;
+    } else {
+	    while ((bo_shm->shmid = shmget(key, size,  IPC_CREAT | IPC_EXCL | 0666)) < 0)
+	    {
+		    if ( errno != EEXIST)
+		    {
+			    TBM_SHM_LOG ("[libtbm-shm:%d] error %s:%d Fail to allocate the shared memory segment (%s)\n",
+					    getpid(), __FUNCTION__, __LINE__, strerror(errno));
+			    free (bo_shm);
+			    return 0;
+		    }
+
+		    //try to allocate the segment with next key;
+		    key += 1;
+	    }
+
+	    bo_shm->key = key;
+
+	    if ((bo_shm->pBase = shmat(bo_shm->shmid, NULL, 0)) == (char *) -1) {
+		    TBM_SHM_LOG ("[libtbm-shm:%d] error %s:%d Fail to attach the shared memory segment (%s)\n",
+				    getpid(), __FUNCTION__, __LINE__,  strerror(errno));
+		    free(bo_shm);
+		    return 0;
+	    }
     }
 
     bo_shm->size = size;
@@ -306,11 +336,16 @@ tbm_shm_bo_free(tbm_bo bo)
          bo_shm->shmid, bo_shm->key,
          bo_shm->size);
 
-    /* Free shm object*/
-    if (shmdt(bo_shm->pBase) == -1)
-    {
-    	TBM_SHM_LOG ("[libtbm-shm:%d] error %s:%d Fail to detach shared memory segment bo:%p (%s)\n",
-    			getpid(), __FUNCTION__, __LINE__, bo, strerror(errno));
+    if (bo_shm->is_scanout) {
+	munmap(bo_shm->pBase, bo_shm->size);
+	close(bo_shm->fd);
+    } else {
+	    /* Free shm object*/
+	    if (shmdt(bo_shm->pBase) == -1)
+	    {
+		    TBM_SHM_LOG ("[libtbm-shm:%d] error %s:%d Fail to detach shared memory segment bo:%p (%s)\n",
+				    getpid(), __FUNCTION__, __LINE__, bo, strerror(errno));
+	    }
     }
 
     free (bo_shm);
