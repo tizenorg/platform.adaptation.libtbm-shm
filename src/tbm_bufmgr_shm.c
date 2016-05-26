@@ -236,7 +236,6 @@ tbm_shm_bo_alloc (tbm_bo bo, int size, int flags)
     {
         TBM_SHM_LOG ("[libtbm-shm:%d] warning %s:%d TBM_BO_SCANOUT ins't supported\n",
                 getpid(), __FUNCTION__, __LINE__);
-        return 0;
     }
 
     bo_shm = calloc (1, sizeof(struct _tbm_bo_shm));
