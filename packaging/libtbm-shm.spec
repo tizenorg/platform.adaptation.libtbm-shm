@@ -7,7 +7,6 @@ Group:          System/Libraries
 ExcludeArch:    i586
 Source0:        %{name}-%{version}.tar.gz
 
-BuildRequires:  pkgconfig(pthread-stubs)
 BuildRequires:  pkgconfig(libdrm)
 BuildRequires:  pkgconfig(libtbm)
 BuildRequires:  pkgconfig(dlog)
